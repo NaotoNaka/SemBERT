@@ -132,7 +132,7 @@ class SnliProcessor(DataProcessor):
             #if(0.5<float(line[0]['bert_large_score'])):
             lines.append(modifiedLine)
             line=f.readline()
-            if(maxlen<=len(lines)):
+            if(maxlen<len(lines)):
                 break
             #print(modifiedLine)
             #print(1/0)
@@ -602,7 +602,7 @@ def main():
 
     if args.do_COSMOS:
         # for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
-        eval_examples = processor.get_COSMOS_examples(2)
+        eval_examples = processor.get_COSMOS_examples(1000)
         eval_features = convert_examples_to_features(
             eval_examples, label_list, args.max_seq_length, tokenizer, srl_predictor=srl_predictor)
         eval_features = transform_tag_features(args.max_num_aspect, eval_features, tag_tokenizer,
