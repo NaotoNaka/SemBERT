@@ -8,6 +8,9 @@ import logging
 import os
 import random
 import sys
+import json
+import string
+import pickle
 
 import numpy as np
 import torch
@@ -98,17 +101,46 @@ class SnliProcessor(DataProcessor):
   def get_train_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+        self._read_tsv(os.path.join(data_dir, "train.tsv_tag_label")), "train")
 
   def get_dev_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+        self._read_tsv(os.path.join(data_dir, "dev_matched.tsv_tag_label")), "dev")
 
   def get_test_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+        self._read_tsv(os.path.join(data_dir, "test_matched.tsv_tag_label")), "test")
+
+  def get_COSMOS_examples(self,maxlen):
+    path = '/net/per920a/export/das14a/satoh-lab/y-kondo/cheapfake-challenge-acmmm-22/data/cosmos_anns_acm/acm_anns/public_test_acm.json'
+    decoder = json.JSONDecoder()
+    lines=[[0,0,0,0]]
+    with open(path, 'r')as f:
+        line=f.readline()
+        while line:
+            modifiedLine=[0]*4
+            line = decoder.raw_decode(line)
+            #print(line)
+            #print(line)
+            #print(type(line))
+            modifiedLine[1]=line[0]['caption1'].translate(str.maketrans('', '', string.punctuation))
+            modifiedLine[2]=line[0]['caption2'].translate(str.maketrans('', '', string.punctuation))
+            modifiedLine[3]=("entailment" if(line[0]['context_label']==0)else("contradiction"))
+            #print(modifiedLine)
+            #if(0.5<float(line[0]['bert_large_score'])):
+            lines.append(modifiedLine)
+            line=f.readline()
+            if(maxlen<=len(lines)):
+                break
+            #print(modifiedLine)
+            #print(1/0)
+    #print(lines[:3])
+    #print(lines[0])
+    #print(1/0)
+    return self._create_examples(lines, "dev")
+
 
   def get_labels(self):
     """See base class."""
@@ -117,15 +149,20 @@ class SnliProcessor(DataProcessor):
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
     examples = []
+    #print(lines[1])
     for (i, line) in enumerate(lines):
         if i == 0:
             continue
         guid = "%s-%s" % (set_type, line[0])
-        text_a = line[7]
-        text_b = line[8]
+        text_a = line[1]
+        text_b = line[2]
         label = line[-1]
+        #print(label)
         examples.append(
             InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    #print(examples[0].text_a)
+    #print([i.label for i in examples])
+    #print(1/0)
     return examples
 
 
@@ -134,7 +171,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
     """Loads a data file into a list of `InputBatch`s."""
 
     label_map = {label : i for i, label in enumerate(label_list)}
-    print(label_map)
+    #print(label_map)
     max_aspect = 0
     features = []
     for (ex_index, example) in enumerate(tqdm(examples)):
@@ -155,6 +192,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         tok_to_orig_index_b = []  # subword_token_index -> org_word_index
         token_tag_sequence_b = None
         if example.text_b:
+            #print(example.text_b)
             tag_sequence = get_tags(srl_predictor, example.text_b, tag_vocab)
             token_tag_sequence_b = QueryTagSequence(tag_sequence[0], tag_sequence[1])
             tokens_b_org = tag_sequence[0]
@@ -305,7 +343,20 @@ def _truncate_seq_pair(tokens_a, tokens_b, tok_to_orig_index_a, tok_to_orig_inde
             tok_to_orig_index_b.pop()
 
 def accuracy(out, labels):
+    #print(labels)
     outputs = np.argmax(out, axis=1)
+    #print(labels)
+    outputs=outputs<1
+    outputs=outputs.astype(int)
+    labels=labels<1
+    labels=labels.astype(int)
+    #print(outputs)
+    #print('out')
+    #print(outputs)
+    #print(labels)
+    #print(np.sum(outputs == labels))
+    #print(np.sum(outputs == labels))
+    #print(1/0)
     return np.sum(outputs == labels)
 
 def main():
@@ -356,6 +407,9 @@ def main():
     parser.add_argument("--do_predict",
                         action='store_true',
                         help="Whether to run eval on the dev set.")
+    parser.add_argument("--do_COSMOS",
+                        action='store_true',
+                        help="Whether to run eval on the COSMOS set.")
     parser.add_argument("--do_lower_case",
                         action='store_true',
                         help="Set this flag if you are using an uncased model.")
@@ -442,7 +496,7 @@ def main():
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
-    if not args.do_train and not args.do_eval and not args.do_predict:
+    if not args.do_train and not args.do_eval and not args.do_predict and not args.do_COSMOS:
         raise ValueError("At least one of `do_train` or `do_eval` must be True.")
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
@@ -545,6 +599,88 @@ def main():
                 logger.info("Result:  %s = %s",  key, str(result[key]))
                 writer.write("Result: %s = %s\n" % (key, str(result[key])))
         logger.info("result:  %s", str(result))
+
+    if args.do_COSMOS:
+        # for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
+        eval_examples = processor.get_COSMOS_examples(2)
+        eval_features = convert_examples_to_features(
+            eval_examples, label_list, args.max_seq_length, tokenizer, srl_predictor=srl_predictor)
+        eval_features = transform_tag_features(args.max_num_aspect, eval_features, tag_tokenizer,
+                                               args.max_seq_length)
+        print([i.label for i in eval_examples])
+        #print(1/0)
+        logger.info("***** Running evaluation *****")
+        logger.info("  Num examples = %d", len(eval_examples))
+        logger.info("  Batch size = %d", args.eval_batch_size)
+        all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+        all_start_end_idx = torch.tensor([f.orig_to_token_split_idx for f in eval_features], dtype=torch.long)
+        all_input_tag_ids = torch.tensor([f.input_tag_ids for f in eval_features], dtype=torch.long)
+        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_start_end_idx,
+                                  all_input_tag_ids, all_label_ids)
+        # Run prediction for full data
+        eval_sampler = SequentialSampler(eval_data)
+        eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
+
+        # epoch = 1
+        output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
+        model_state_dict = torch.load(output_model_file)
+        predict_model = BertForSequenceClassificationTag.from_pretrained(args.bert_model,
+                                                                         state_dict=model_state_dict,
+                                                                         num_labels=num_labels,
+                                                                         tag_config=tag_config)
+        predict_model.to(device)
+        predict_model.eval()
+        eval_loss, eval_accuracy = 0, 0
+        nb_eval_steps, nb_eval_examples = 0, 0
+        logitLog=[]
+        for input_ids, input_mask, segment_ids, start_end_idx, input_tag_ids, label_ids in tqdm(
+                eval_dataloader, desc="Evaluating"):
+            input_ids = input_ids.to(device)
+            input_mask = input_mask.to(device)
+            segment_ids = segment_ids.to(device)
+            label_ids = label_ids.to(device)
+            start_end_idx = start_end_idx.to(device)
+            input_tag_ids = input_tag_ids.to(device)
+            with torch.no_grad():
+                tmp_eval_loss,_ = predict_model(input_ids, segment_ids, input_mask, start_end_idx, input_tag_ids,
+                                              label_ids)
+                logits,seq_out = predict_model(input_ids, segment_ids, input_mask, start_end_idx, input_tag_ids,
+                                       None)
+            print(seq_out.shape)
+            logits = logits.detach().cpu().numpy()
+            label_ids = label_ids.to('cpu').numpy()
+
+            outputs = np.argmax(logits, axis=1)
+            outputs=outputs<1
+            outputs=outputs.astype(int)
+            labels=label_ids<1
+            labels=labels.astype(int)
+            #print(labels)
+            logitLog.append([outputs,labels])
+            tmp_eval_accuracy = accuracy(logits, label_ids)
+
+            eval_loss += tmp_eval_loss.mean().item()
+            eval_accuracy += tmp_eval_accuracy
+
+            nb_eval_examples += input_ids.size(0)
+            nb_eval_steps += 1
+
+        eval_loss = eval_loss / nb_eval_steps
+        eval_accuracy = eval_accuracy / nb_eval_examples
+        result = {'eval_loss': eval_loss,
+                  'eval_accuracy': eval_accuracy}
+        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
+        with open(output_eval_file, "a") as writer:
+            logger.info("***** COSMOS Eval results *****")
+            for key in sorted(result.keys()):
+                logger.info("Result:  %s = %s",  key, str(result[key]))
+                writer.write("Result: %s = %s\n" % (key, str(result[key])))
+        logger.info("result:  %s", str(result))
+        with open('logitLog.pickle', 'wb') as handle:
+            pickle.dump(logitLog, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     if args.do_predict:
         eval_examples = processor.get_test_examples(args.data_dir)

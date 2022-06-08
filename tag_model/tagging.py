@@ -8,6 +8,7 @@ class SRLPredictor(object):
         self.predictor._model = self.predictor._model.cuda()  # this can only support GPU computation
 
     def predict(self, sent):
+        #print(sent)
         return self.predictor.predict(sentence=sent)
 
 
@@ -15,6 +16,7 @@ def get_tags(srl_predictor, tok_text, tag_vocab):
     if srl_predictor == None:
         srl_result = json.loads(tok_text)  # can load a pre-tagger dataset for quick evaluation
     else:
+        #print(len(tok_text))
         srl_result = srl_predictor.predict(tok_text)
     sen_verbs = srl_result['verbs']
     sen_words = srl_result['words']

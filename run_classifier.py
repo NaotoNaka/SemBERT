@@ -410,12 +410,12 @@ class SnliProcessor(DataProcessor):
   def get_dev_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv_tag_label")), "dev")
+        self._read_tsv(os.path.join(data_dir, "dev_matched.tsv_tag_label")), "dev")
 
   def get_test_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv_tag_label")), "test")
+        self._read_tsv(os.path.join(data_dir, "test_matched.tsv_tag_label")), "test")
 
   def get_labels(self):
     """See base class."""
@@ -447,17 +447,17 @@ class WnliProcessor(DataProcessor):
   def get_train_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv_tag")), "train")
+        self._read_tsv(os.path.join(data_dir, "train.tsv_tag_label")), "train")
 
   def get_dev_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv_tag")), "dev")
+        self._read_tsv(os.path.join(data_dir, "dev_matched.tsv_tag_label")), "dev")
 
   def get_test_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv_tag")), "test")
+        self._read_tsv(os.path.join(data_dir, "test_matched.tsv_tag_label")), "test")
 
   def get_labels(self):
     """See base class."""
@@ -502,6 +502,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             max_aspect = len(tag_sequence[1])
         tok_to_orig_index_a.append(0)  # [CLS]
         for (i, token) in enumerate(tokens_a_org):
+            #print(token)
             sub_tokens = tokenizer.tokenize(token)
             for sub_token in sub_tokens:
                 tok_to_orig_index_a.append(i + 1)
@@ -847,6 +848,7 @@ def main():
     num_labels = len(label_list)
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    #print(BertTokenizer.from_pretrained("bert-wwm-uncased", do_lower_case=True))
     if args.tagger_path != None:
         srl_predictor = SRLPredictor(args.tagger_path)
     else:
